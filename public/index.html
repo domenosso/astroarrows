@@ -37,15 +37,17 @@
         }
 
         #menu { position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: white; z-index: 1000; flex-direction: column; }
-        .card { background: #f1f2f6; padding: 20px 30px; border-radius: 25px; border: 5px solid var(--dark); display: flex; flex-direction: column; gap: 12px; width: 320px; box-shadow: 0 10px 20px rgba(0,0,0,0.15); box-sizing: border-box; }
-        input { padding: 12px; border: 3px solid #dfe4ea; border-radius: 12px; font-size: 16px; text-align: center; outline: none; }
-        .btn { padding: 12px; border: none; border-radius: 12px; background: var(--dark); color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.1s; }
+        .card { background: #f1f2f6; padding: 20px 30px; border-radius: 25px; border: 5px solid var(--dark); display: flex; flex-direction: column; gap: 10px; width: 320px; box-shadow: 0 10px 20px rgba(0,0,0,0.15); box-sizing: border-box; }
+        input { padding: 10px; border: 3px solid #dfe4ea; border-radius: 12px; font-size: 15px; text-align: center; outline: none; }
+        .btn { padding: 12px; border: none; border-radius: 12px; background: var(--dark); color: white; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.1s; }
         .btn:active { transform: scale(0.98); }
+        .btn-sec { background: #747d8c; padding: 8px; font-size: 13px; }
         .team-btn { flex: 1; padding: 10px; border: 3px solid var(--dark); border-radius: 10px; opacity: 0.4; color: white; font-weight: bold; cursor: pointer; }
         .team-btn.active { opacity: 1; transform: scale(1.05); }
 
         #ui { position: absolute; top: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
         .top-bar { position: absolute; top: 12px; width: 100%; display: flex; justify-content: center; gap: 30px; }
+        .room-tag { position: absolute; top: 12px; left: 15px; background: white; border: 3px solid var(--dark); border-radius: 8px; padding: 4px 10px; font-size: 12px; color: var(--dark); font-weight: bold; }
         .base-hp { width: 140px; background: white; border: 3px solid var(--dark); border-radius: 8px; height: 18px; position: relative; overflow: hidden; }
         .base-hp-fill { height: 100%; transition: 0.2s; }
         .base-hp-text { position: absolute; width: 100%; text-align: center; font-size: 11px; line-height: 18px; color: var(--dark); font-weight: bold; }
@@ -65,19 +67,25 @@
 </div>
 
 <div id="menu">
-    <!-- Уменьшенный заголовок -->
-    <h1 style="color:var(--dark); margin:0 0 15px 0; font-size:20px; text-align:center;">ASTRO ARROWS</h1>
+    <h1 style="color:var(--dark); margin:0 0 10px 0; font-size:20px; text-align:center;">ASTRO ARROWS</h1>
     <div class="card">
         <input type="text" id="nick" placeholder="ТВОЙ НИК" maxlength="10">
-        <div style="display:flex; gap:10px;">
+        
+        <div style="display:flex; gap:8px;">
+            <input type="text" id="room-code" placeholder="КОД (4 ЦИФРЫ)" maxlength="4" style="flex:1;">
+            <button class="btn btn-sec" onclick="genCode()">СОЗДАТЬ</button>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:5px;">
             <button class="team-btn active" id="btn-g" style="background:var(--green)" onclick="setTeam('green')">ЗЕЛЕНЫЕ</button>
             <button class="team-btn" id="btn-r" style="background:var(--red)" onclick="setTeam('red')">КРАСНЫЕ</button>
         </div>
-        <button class="btn" onclick="startGame()">ИГРАТЬ</button>
+        <button class="btn" style="margin-top:5px;" onclick="startGame()">ИГРАТЬ</button>
     </div>
 </div>
 
 <div id="ui">
+    <div class="room-tag" id="ui-room-code">ROOM: ----</div>
     <div class="top-bar">
         <div>
             <div style="font-size:10px; text-align:center; color:var(--dark);">GREEN BASE</div>
@@ -102,7 +110,7 @@
     const mctx = mmap.getContext('2d');
     
     let WORLD = { w: 3000, h: 2000 };
-    let myNick = "", myTeam = "green", myId = "p_" + Math.random().toString(36).substr(2, 7);
+    let myNick = "", myTeam = "green", roomCode = "", myId = "p_" + Math.random().toString(36).substr(2, 7);
     let inputs = { move: {x:0, y:0}, shoot: {x:0, y:0} };
     
     let gameState = {
@@ -116,6 +124,11 @@
 
     let channel = null;
 
+    function genCode() {
+        const code = Math.floor(1000 + Math.random() * 9000).toString();
+        document.getElementById('room-code').value = code;
+    }
+
     function setTeam(t) {
         myTeam = t;
         document.getElementById('btn-g').classList.toggle('active', t === 'green');
@@ -124,20 +137,25 @@
 
     async function startGame() {
         myNick = document.getElementById('nick').value.trim() || "Player";
+        roomCode = document.getElementById('room-code').value.trim();
 
-        // Настройка Pusher с обращением к Vercel Auth
+        if(!/^\d{4}$/.test(roomCode)) {
+            alert("Введите или сгенерируйте 4-значный код комнаты!");
+            return;
+        }
+
         const pusher = new Pusher('932af3e401d9bf010eb9', {
             cluster: 'us2',
             authEndpoint: '/api/pusher-auth'
         });
 
-        channel = pusher.subscribe('private-game-room');
+        // Создаем отдельный канал под 4-значный код
+        channel = pusher.subscribe(`private-room-${roomCode}`);
 
         channel.bind('pusher:subscription_succeeded', () => {
-            // Проверка лимита игроков в команде (макс 3)
             let teamCount = Object.values(gameState.players).filter(p => p.t === myTeam).length;
             if(teamCount >= 3) {
-                alert(`В команде ${myTeam.toUpperCase()} уже 3 игрока! Выберите другую команду.`);
+                alert(`В команде ${myTeam.toUpperCase()} этой комнаты уже 3 игрока!`);
                 location.reload();
                 return;
             }
@@ -154,13 +172,13 @@
                 s: 0
             };
 
+            document.getElementById('ui-room-code').innerText = "ROOM: " + roomCode;
             document.getElementById('menu').style.display = 'none';
             document.getElementById('ui').style.display = 'block';
 
             resize();
             requestAnimationFrame(gameLoop);
 
-            // Отправка позиции другим каждые 50мс
             setInterval(() => {
                 if(gameState.players[myId] && channel) {
                     channel.trigger('client-player-update', {
@@ -171,17 +189,14 @@
             }, 50);
         });
 
-        // Слушаем обновления от других игроков
         channel.bind('client-player-update', (data) => {
             gameState.players[data.id] = data.player;
         });
 
-        // Слушаем выстрелы других игроков
         channel.bind('client-shoot', (b) => {
             gameState.bullets.push(b);
         });
 
-        // Слушаем урон по базам
         channel.bind('client-base-damage', (data) => {
             if(gameState.bases[data.team]) {
                 gameState.bases[data.team].hp = Math.max(0, gameState.bases[data.team].hp - data.damage);
@@ -189,12 +204,10 @@
         });
     }
 
-    // --- ИГРОВОЙ ЦИКЛ ---
     function gameLoop() {
         let me = gameState.players[myId];
 
         if (me) {
-            // Физика моего игрока
             me.vx += inputs.move.x * 0.8;
             me.vy += inputs.move.y * 0.8;
             me.x += me.vx;
@@ -204,7 +217,6 @@
             me.x = Math.max(50, Math.min(WORLD.w - 50, me.x));
             me.y = Math.max(50, Math.min(WORLD.h - 50, me.y));
 
-            // Стрельба
             if (Math.hypot(inputs.shoot.x, inputs.shoot.y) > 0.2) {
                 me.a = Math.atan2(inputs.shoot.y, inputs.shoot.x);
                 if (Date.now() - me.s > 300) {
@@ -223,7 +235,6 @@
             }
         }
 
-        // Обновление пуль
         for (let bi = gameState.bullets.length - 1; bi >= 0; bi--) {
             let b = gameState.bullets[bi];
             b.x += b.vx;
@@ -234,7 +245,6 @@
                 continue;
             }
 
-            // Проверка попаданий по базам (только владелец пули считает урон)
             if (b.owner === myId) {
                 for (let team in gameState.bases) {
                     let base = gameState.bases[team];
@@ -250,7 +260,6 @@
                 }
             }
 
-            // Урон по игрокам
             for (let id in gameState.players) {
                 let p = gameState.players[id];
                 if (b.t !== p.t && Math.hypot(b.x - p.x, b.y - p.y) < 35) {
@@ -279,17 +288,14 @@
         ctx.setTransform(1,0,0,1,0,0);
         ctx.fillStyle = "white"; ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        // Камера
         ctx.translate(canvas.width/2, canvas.height/2);
         ctx.scale(0.7, 0.7);
         ctx.translate(-me.x, -me.y);
 
-        // Сетка
         ctx.strokeStyle = "#eee"; ctx.lineWidth = 4;
         for(let x=0; x<=WORLD.w; x+=200) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,WORLD.h); ctx.stroke(); }
         for(let y=0; y<=WORLD.h; y+=200) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(WORLD.w,y); ctx.stroke(); }
 
-        // Базы
         for(let t in gameState.bases) {
             let b = gameState.bases[t];
             let g = ctx.createRadialGradient(b.x, b.y, 10, b.x, b.y, 100);
@@ -300,7 +306,6 @@
             ctx.fillText(b.hp + "/100", b.x, b.y - 120);
         }
 
-        // Игроки
         for(let id in gameState.players) {
             let p = gameState.players[id];
             ctx.save(); ctx.translate(p.x, p.y);
@@ -316,7 +321,6 @@
             ctx.fillText(p.hp + "/3 HP", p.x, p.y - 55);
         }
 
-        // Пули
         gameState.bullets.forEach(b => {
             ctx.fillStyle = "yellow"; ctx.strokeStyle = "black"; ctx.lineWidth = 4;
             ctx.beginPath(); ctx.arc(b.x, b.y, 12, 0, Math.PI*2); ctx.fill(); ctx.stroke();
