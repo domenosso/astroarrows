@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/pusher-auth",
+      "destination": "/api/pusher-auth.js"
+    }
+  ]
+}
